@@ -1,11 +1,11 @@
-# iLovePDF - Trình Chỉnh Sửa & Bôi Xóa Đa Định Dạng (PDF, Word, Ảnh)
+# Chỉnh Sửa File - Trình Chỉnh Sửa & Bôi Xóa Đa Định Dạng (PDF, Word, Ảnh)
 
-Ứng dụng web toàn năng phong cách iLovePDF tiếng Việt, hỗ trợ chỉnh sửa nội dung, bôi xóa / che phủ bảo mật (Redact), thêm văn bản, hình vẽ và xuất tệp chất lượng cao trực tiếp tại trình duyệt (100% Client-Side, tương thích tuyệt đối với Vercel).
+Ứng dụng web toàn năng xử lý tài liệu đa định dạng tiếng Việt, hỗ trợ chỉnh sửa nội dung, bôi xóa / che phủ bảo mật (Redact), thêm văn bản, hình vẽ và xuất tệp chất lượng cao trực tiếp tại trình duyệt (100% Client-Side, tương thích tuyệt đối với Vercel).
 
 ## 🚀 Các tính năng chính
 - **Trang chủ (`/`)**:
-  - Tái hiện phong cách giao diện iLovePDF (Logo trái tim đỏ `#e5322d`, menu điều hướng, nút chuyển đổi Light/Dark mode).
-  - Lưới hiển thị 31 công cụ chuẩn iLovePDF chia theo danh mục (Tổ chức PDF, Tối ưu hóa, Chuyển đổi sang/từ PDF, Chỉnh sửa & Biên tập, Bảo mật & Ký tên, AI).
+  - Giao diện hiện đại (Logo Chỉnh Sửa File, menu điều hướng, nút chuyển đổi Light/Dark mode).
+  - Lưới hiển thị 31 công cụ chuẩn chia theo danh mục (Tổ chức PDF, Tối ưu hóa, Chuyển đổi sang/từ PDF, Chỉnh sửa & Biên tập, Bảo mật & Ký tên, AI).
 - **Trình Chỉnh Sửa & Bôi Xóa (`/editor`)**:
   - Bộ tiếp nhận tệp đa định dạng: PDF (`.pdf`), Word (`.docx`, `.doc`), Hình ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`).
   - Hỗ trợ nạp tệp mẫu nhanh (PDF, DOCX, PNG) để kiểm thử tức thì không cần tải tệp từ ngoài.

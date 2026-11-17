@@ -135,7 +135,7 @@ export function FileUploader({ onFileSelected, isLoading = false }: FileUploader
         color: rgb(0.9, 0.2, 0.2),
       });
 
-      page1.drawText('iLovePDF Editor - Sample Document (Page 1/2)', {
+      page1.drawText('Chỉnh Sửa File - Sample Document (Page 1/2)', {
         x: 50,
         y: 710,
         size: 13,
@@ -278,7 +278,7 @@ export function FileUploader({ onFileSelected, isLoading = false }: FileUploader
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: 'Bên B (Nhà cung cấp): Công ty Giải pháp Phần mềm iLovePDF Editor.',
+                    text: 'Bên B (Nhà cung cấp): Công ty Giải pháp Phần mềm Chỉnh Sửa File.',
                   }),
                 ],
                 spacing: { after: 200 },

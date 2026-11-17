@@ -22,7 +22,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    const storedTheme = localStorage.getItem('ilovepdf_theme') as Theme | null;
+    const storedTheme = localStorage.getItem('chinhsuafile_theme') as Theme | null;
     if (storedTheme) {
       setThemeState(storedTheme);
       if (storedTheme === 'dark') {
@@ -41,7 +41,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('ilovepdf_theme', newTheme);
+    localStorage.setItem('chinhsuafile_theme', newTheme);
     if (newTheme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {

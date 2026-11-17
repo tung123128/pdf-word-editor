@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Heart, ShieldCheck, Zap, Lock, Sparkles, CheckCircle, Globe, Github } from 'lucide-react';
+import { FileEdit, ShieldCheck, Zap, Lock, Sparkles, CheckCircle, Globe, Github } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -11,10 +11,10 @@ export function Footer() {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
               <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-500 text-white shadow-md shadow-brand-500/25">
-                <Heart className="w-5 h-5 fill-white" />
+                <FileEdit className="w-5 h-5 text-white" />
               </div>
               <span className="text-2xl font-black text-gray-950 dark:text-white">
-                iLove<span className="text-brand-500">PDF</span>
+                Chỉnh sửa <span className="text-brand-500">file</span>
               </span>
             </div>
             <p className="text-sm text-gray-600 dark:text-dark-muted leading-relaxed max-w-sm">
@@ -133,7 +133,7 @@ export function Footer() {
         {/* Bottom bar */}
         <div className="pt-8 border-t border-gray-200 dark:border-dark-border flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500 dark:text-dark-muted">
           <div>
-            © {new Date().getFullYear()} iLovePDF Editor • Ứng dụng Biên tập & Bôi xóa Đa định dạng phong cách iLovePDF.
+            © {new Date().getFullYear()} Chỉnh sửa file • Ứng dụng Biên tập & Bôi xóa Đa định dạng chuyên nghiệp.
           </div>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5 font-bold text-gray-700 dark:text-gray-200">

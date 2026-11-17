@@ -76,7 +76,7 @@ export function Hero() {
 
         {/* Subtitle */}
         <p className="max-w-3xl mx-auto text-base sm:text-xl text-gray-600 dark:text-dark-muted mb-10 leading-relaxed font-normal">
-          Nền tảng xử lý tài liệu phong cách iLovePDF tiếng Việt: tải lên tệp <span className="font-semibold text-gray-900 dark:text-white">PDF</span>, văn bản <span className="font-semibold text-gray-900 dark:text-white">Word (.docx)</span> hay <span className="font-semibold text-gray-900 dark:text-white">Ảnh (PNG, JPG)</span>, tẩy xóa chi tiết thừa, che phủ thông tin nhạy cảm bảo mật và xuất tệp sắc nét 100%.
+          Nền tảng xử lý tài liệu đa năng tiếng Việt: tải lên tệp <span className="font-semibold text-gray-900 dark:text-white">PDF</span>, văn bản <span className="font-semibold text-gray-900 dark:text-white">Word (.docx)</span> hay <span className="font-semibold text-gray-900 dark:text-white">Ảnh (PNG, JPG)</span>, tẩy xóa chi tiết thừa, che phủ thông tin nhạy cảm bảo mật và xuất tệp sắc nét 100%.
         </p>
 
         {/* CTA Buttons */}

@@ -92,7 +92,7 @@ export function EditorToolbar({
   const colorPalette = [
     { name: 'Đen', hex: '#000000' },
     { name: 'Trắng', hex: '#ffffff' },
-    { name: 'Đỏ iLovePDF', hex: '#e5322d' },
+    { name: 'Đỏ Chủ Đạo', hex: '#e5322d' },
     { name: 'Xanh dương', hex: '#008ee9' },
     { name: 'Xanh lá', hex: '#4acd86' },
     { name: 'Cam / Vàng', hex: '#ffc233' },

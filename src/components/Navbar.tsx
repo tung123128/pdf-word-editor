@@ -36,10 +36,10 @@ export function Navbar() {
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2.5 group">
               <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-500 text-white shadow-md shadow-brand-500/30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
-                <Heart className="w-5 h-5 fill-white animate-pulse" />
+                <FileEdit className="w-5 h-5 text-white" />
               </div>
               <span className="text-2xl font-black tracking-tight text-gray-950 dark:text-white flex items-center">
-                iLove<span className="text-brand-500 transition-colors group-hover:text-brand-600">PDF</span>
+                Chỉnh sửa <span className="text-brand-500 transition-colors group-hover:text-brand-600 ml-1.5">file</span>
               </span>
             </Link>
 
