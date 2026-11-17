@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { FileUploader } from '@/components/editor/FileUploader';
@@ -15,6 +16,8 @@ import {
   ToolType 
 } from '@/types';
 import { 
+  loadPdfDocument,
+  renderPdfPageFromDoc,
   renderPdfPage, 
   getPdfPageCount, 
   exportModifiedPdf 
@@ -25,13 +28,18 @@ import {
 } from '@/lib/image-engine';
 import { parseDocxFile, exportModifiedDocx } from '@/lib/docx-engine';
 import { downloadBlob } from '@/lib/export-utils';
+import { getTransferFile } from '@/lib/file-transfer';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function EditorPage() {
+function EditorContent() {
+  const searchParams = useSearchParams();
   const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<SupportedFileType | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [fileBytes, setFileBytes] = useState<ArrayBuffer | null>(null);
+
+  // Cached PDF Document instance
+  const pdfDocRef = useRef<any>(null);
 
   // Document Pages State
   const [pages, setPages] = useState<DocumentPage[]>([]);
@@ -61,8 +69,29 @@ export default function EditorPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Check if file was passed from homepage Hero via sessionStorage
+  // Sync tool from URL search params if present
   useEffect(() => {
+    const toolParam = searchParams.get('tool');
+    if (toolParam) {
+      const validTools: ToolType[] = ['select', 'redact', 'erase', 'text', 'draw', 'rectangle', 'circle', 'arrow'];
+      if (validTools.includes(toolParam as ToolType)) {
+        setActiveTool(toolParam as ToolType);
+      } else if (toolParam === 'edit') {
+        setActiveTool('text');
+      } else if (toolParam === 'compress' || toolParam === 'merge' || toolParam === 'split') {
+        setActiveTool('redact');
+      }
+    }
+  }, [searchParams]);
+
+  // Check if file was passed from homepage Hero via in-memory transfer or sessionStorage
+  useEffect(() => {
+    const memoryFile = getTransferFile();
+    if (memoryFile) {
+      handleFileSelect(memoryFile);
+      return;
+    }
+
     try {
       const pendingData = sessionStorage.getItem('pending_file_data');
       const pendingName = sessionStorage.getItem('pending_file_name');
@@ -93,6 +122,7 @@ export default function EditorPage() {
     setAnnotations({});
     setHistory({});
     setHistoryIndex({});
+    pdfDocRef.current = null;
 
     const nameLower = selectedFile.name.toLowerCase();
     const isPdf = nameLower.endsWith('.pdf');
@@ -103,13 +133,17 @@ export default function EditorPage() {
       if (isPdf) {
         setFileType('pdf');
         const buffer = await selectedFile.arrayBuffer();
-        setFileBytes(buffer);
+        // Save safe copy of bytes for exporting later
+        setFileBytes(buffer.slice(0));
 
-        const pageCount = await getPdfPageCount(buffer);
+        // Load PDF document using safe cloned Uint8Array
+        const pdfDoc = await loadPdfDocument(buffer);
+        pdfDocRef.current = pdfDoc;
+        const pageCount = pdfDoc.numPages;
         const initialPages: DocumentPage[] = [];
 
-        // Render page 1
-        const firstPage = await renderPdfPage(buffer, 1, 1.5);
+        // Render page 1 immediately
+        const firstPage = await renderPdfPageFromDoc(pdfDoc, 1, 1.5);
         initialPages.push({
           index: 0,
           width: firstPage.width,
@@ -119,7 +153,7 @@ export default function EditorPage() {
           isRendered: true,
         });
 
-        // Placeholder for additional pages
+        // Placeholders for remaining pages
         for (let i = 1; i < pageCount; i++) {
           initialPages.push({
             index: i,
@@ -130,11 +164,11 @@ export default function EditorPage() {
         }
         setPages(initialPages);
 
-        // Pre-render remaining thumbnails in background
+        // Pre-render remaining thumbnails in background asynchronously
         (async () => {
           for (let i = 2; i <= pageCount; i++) {
             try {
-              const p = await renderPdfPage(buffer, i, 0.4);
+              const p = await renderPdfPageFromDoc(pdfDoc, i, 0.4);
               setPages((prev) =>
                 prev.map((item, idx) =>
                   idx === i - 1
@@ -145,7 +179,9 @@ export default function EditorPage() {
                     : item
                 )
               );
-            } catch {}
+            } catch (err) {
+              console.warn('Could not render thumbnail for page', i, err);
+            }
           }
         })();
 
@@ -153,7 +189,7 @@ export default function EditorPage() {
       } else if (isDocx) {
         setFileType('docx');
         const buffer = await selectedFile.arrayBuffer();
-        setFileBytes(buffer);
+        setFileBytes(buffer.slice(0));
 
         const parsed = await parseDocxFile(buffer);
         setWordHtml(parsed.html);
@@ -173,7 +209,6 @@ export default function EditorPage() {
         setFileType('image');
         const imgInfo = await loadImageFromFile(selectedFile);
 
-        // Standardize display dimensions (keep aspect ratio within max 1000px)
         const maxDim = 1000;
         let dispW = imgInfo.width;
         let dispH = imgInfo.height;
@@ -196,8 +231,8 @@ export default function EditorPage() {
         showToast(`Đã nạp ảnh thành công (${imgInfo.width}x${imgInfo.height}px)!`);
       }
     } catch (err: any) {
-      console.error(err);
-      showToast('Lỗi khi mở tệp: ' + err.message, 'error');
+      console.error('File load error:', err);
+      showToast('Lỗi khi mở tệp: ' + (err.message || 'Tệp không hợp lệ'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -209,23 +244,31 @@ export default function EditorPage() {
     const targetPage = pages[pageIdx];
 
     // If PDF page is not rendered at full scale yet, render it now
-    if (fileType === 'pdf' && fileBytes && targetPage && !targetPage.renderCanvas) {
+    if (fileType === 'pdf' && targetPage && !targetPage.renderCanvas) {
       try {
-        const rendered = await renderPdfPage(fileBytes, pageIdx + 1, 1.5);
-        setPages((prev) =>
-          prev.map((p, idx) =>
-            idx === pageIdx
-              ? {
-                  ...p,
-                  renderCanvas: rendered.canvas,
-                  thumbnailDataUrl: rendered.dataUrl,
-                  width: rendered.width,
-                  height: rendered.height,
-                  isRendered: true,
-                }
-              : p
-          )
-        );
+        let pdfDoc = pdfDocRef.current;
+        if (!pdfDoc && fileBytes) {
+          pdfDoc = await loadPdfDocument(fileBytes);
+          pdfDocRef.current = pdfDoc;
+        }
+
+        if (pdfDoc) {
+          const rendered = await renderPdfPageFromDoc(pdfDoc, pageIdx + 1, 1.5);
+          setPages((prev) =>
+            prev.map((p, idx) =>
+              idx === pageIdx
+                ? {
+                    ...p,
+                    renderCanvas: rendered.canvas,
+                    thumbnailDataUrl: rendered.dataUrl,
+                    width: rendered.width,
+                    height: rendered.height,
+                    isRendered: true,
+                  }
+                : p
+            )
+          );
+        }
       } catch (err) {
         console.error('Failed to render page on switch', err);
       }
@@ -279,64 +322,48 @@ export default function EditorPage() {
     pushToHistory(currentPageIndex, updated);
   };
 
-  // Clear all annotations on current page
-  const handleClearPage = () => {
-    const pageAnns = annotations[currentPageIndex] || [];
-    if (pageAnns.length === 0) return;
-
-    if (confirm('Bạn có chắc muốn xóa tất cả chỉnh sửa trên trang này không?')) {
-      setAnnotations((prev) => ({
-        ...prev,
-        [currentPageIndex]: [],
-      }));
-      pushToHistory(currentPageIndex, []);
-    }
-  };
-
-  // Undo
+  // Undo action
   const handleUndo = () => {
-    const curHistory = history[currentPageIndex] || [];
-    const curIdx = historyIndex[currentPageIndex] ?? 0;
-    if (curIdx > 0) {
-      const prevIdx = curIdx - 1;
-      const targetState = curHistory[prevIdx] || [];
-      setAnnotations((prev) => ({
-        ...prev,
-        [currentPageIndex]: targetState,
-      }));
-      setHistoryIndex((prev) => ({
-        ...prev,
-        [currentPageIndex]: prevIdx,
-      }));
-    }
+    const curHistory = history[currentPageIndex];
+    const curIndex = historyIndex[currentPageIndex];
+    if (!curHistory || curIndex === undefined || curIndex <= 0) return;
+
+    const newIndex = curIndex - 1;
+    const targetState = curHistory[newIndex] || [];
+
+    setHistoryIndex((prev) => ({ ...prev, [currentPageIndex]: newIndex }));
+    setAnnotations((prev) => ({ ...prev, [currentPageIndex]: targetState }));
   };
 
-  // Redo
+  // Redo action
   const handleRedo = () => {
-    const curHistory = history[currentPageIndex] || [];
-    const curIdx = historyIndex[currentPageIndex] ?? 0;
-    if (curIdx < curHistory.length - 1) {
-      const nextIdx = curIdx + 1;
-      const targetState = curHistory[nextIdx] || [];
-      setAnnotations((prev) => ({
-        ...prev,
-        [currentPageIndex]: targetState,
-      }));
-      setHistoryIndex((prev) => ({
-        ...prev,
-        [currentPageIndex]: nextIdx,
-      }));
-    }
+    const curHistory = history[currentPageIndex];
+    const curIndex = historyIndex[currentPageIndex];
+    if (!curHistory || curIndex === undefined || curIndex >= curHistory.length - 1) return;
+
+    const newIndex = curIndex + 1;
+    const targetState = curHistory[newIndex] || [];
+
+    setHistoryIndex((prev) => ({ ...prev, [currentPageIndex]: newIndex }));
+    setAnnotations((prev) => ({ ...prev, [currentPageIndex]: targetState }));
   };
 
-  // Export & Download
+  // Clear current page annotations
+  const handleClearPage = () => {
+    if (!confirm('Bạn có chắc muốn xóa tất cả bôi xóa & chỉnh sửa trên trang này không?')) return;
+    setAnnotations((prev) => ({ ...prev, [currentPageIndex]: [] }));
+    pushToHistory(currentPageIndex, []);
+  };
+
+  // Main Export handler
   const handleExport = async () => {
-    if (!file) return;
+    if (!fileType) return;
     setIsProcessing(true);
 
     try {
-      if (fileType === 'pdf' && fileBytes) {
-        // Collect rendered page dimensions
+      if (fileType === 'pdf') {
+        if (!fileBytes) throw new Error('Không tìm thấy dữ liệu tệp PDF gốc.');
+
         const dimensions: Record<number, { width: number; height: number }> = {};
         pages.forEach((p, idx) => {
           dimensions[idx] = { width: p.width, height: p.height };
@@ -445,6 +472,7 @@ export default function EditorPage() {
                   setFile(null);
                   setFileType(null);
                   setPages([]);
+                  pdfDocRef.current = null;
                 }
               }}
               fileName={fileName}
@@ -521,5 +549,20 @@ export default function EditorPage() {
 
       {!file && <Footer />}
     </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-dark-bg text-gray-800 dark:text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-bold">Đang khởi chạy trình chỉnh sửa...</span>
+        </div>
+      </div>
+    }>
+      <EditorContent />
+    </Suspense>
   );
 }

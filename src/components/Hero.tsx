@@ -17,6 +17,8 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 
+import { setTransferFile } from '@/lib/file-transfer';
+
 export function Hero() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -24,21 +26,8 @@ export function Hero() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Create object URL and store in sessionStorage to pass to editor
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const dataUrl = reader.result as string;
-          sessionStorage.setItem('pending_file_name', file.name);
-          sessionStorage.setItem('pending_file_type', file.type || '');
-          sessionStorage.setItem('pending_file_data', dataUrl);
-          router.push('/editor');
-        } catch {
-          // If file is too large for sessionStorage, navigate to editor directly
-          router.push('/editor');
-        }
-      };
-      reader.readAsDataURL(file);
+      setTransferFile(file);
+      router.push('/editor');
     }
   };
 

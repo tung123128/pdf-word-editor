@@ -85,6 +85,7 @@ export function Navbar() {
               >
                 <button
                   type="button"
+                  onClick={() => setToolsDropdownOpen((prev) => !prev)}
                   className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-xl text-gray-700 dark:text-gray-300 hover:text-brand-500 dark:hover:text-brand-400 hover:bg-gray-100/80 dark:hover:bg-dark-card transition-all flex items-center gap-1.5"
                 >
                   <span>TẤT CẢ CÔNG CỤ PDF</span>

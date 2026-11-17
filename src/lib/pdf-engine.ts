@@ -12,13 +12,17 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } {
 
 let pdfjsLib: any = null;
 
-// Dynamically load pdfjs-dist on client
+// Dynamically load pdfjs-dist on client with safe worker configuration
 export async function getPdfJs() {
   if (typeof window === 'undefined') return null;
   if (!pdfjsLib) {
     const pdfjs = await import('pdfjs-dist');
-    // Set worker to official unpkg or local CDN
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version || '3.11.174'}/pdf.worker.min.js`;
+    // Configure worker: prefer same-origin local worker, fallback to cdnjs
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+    } catch {
+      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version || '3.11.174'}/pdf.worker.min.js`;
+    }
     pdfjsLib = pdfjs;
   }
   return pdfjsLib;
@@ -33,20 +37,34 @@ export interface RenderedPdfPage {
 }
 
 /**
- * Render a specific page of a PDF document to an HTMLCanvasElement
+ * Safely load a PDF document without detaching the caller's ArrayBuffer
  */
-export async function renderPdfPage(
-  pdfData: ArrayBuffer,
-  pageNumber: number,
-  scale: number = 1.5
-): Promise<RenderedPdfPage> {
+export async function loadPdfDocument(pdfData: ArrayBuffer) {
   const pdfjs = await getPdfJs();
   if (!pdfjs) throw new Error('PDF.js not available in SSR');
 
-  const loadingTask = pdfjs.getDocument({ data: pdfData });
-  const pdf = await loadingTask.promise;
-  const page = await pdf.getPage(pageNumber);
+  // CRITICAL: Always slice a fresh copy of the ArrayBuffer so postMessage
+  // inside pdf.js Web Worker does not detach/neuter the original buffer.
+  const bufferCopy = new Uint8Array(pdfData.slice(0));
 
+  const loadingTask = pdfjs.getDocument({
+    data: bufferCopy,
+    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+    cMapPacked: true,
+  });
+
+  return await loadingTask.promise;
+}
+
+/**
+ * Render a specific page directly from an already loaded PDF document
+ */
+export async function renderPdfPageFromDoc(
+  pdfDoc: any,
+  pageNumber: number,
+  scale: number = 1.5
+): Promise<RenderedPdfPage> {
+  const page = await pdfDoc.getPage(pageNumber);
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
@@ -73,14 +91,34 @@ export async function renderPdfPage(
 }
 
 /**
+ * Render a specific page of a PDF document to an HTMLCanvasElement
+ */
+export async function renderPdfPage(
+  pdfData: ArrayBuffer,
+  pageNumber: number,
+  scale: number = 1.5
+): Promise<RenderedPdfPage> {
+  const pdfDoc = await loadPdfDocument(pdfData);
+  return await renderPdfPageFromDoc(pdfDoc, pageNumber, scale);
+}
+
+/**
  * Get total number of pages in a PDF file
  */
 export async function getPdfPageCount(pdfData: ArrayBuffer): Promise<number> {
-  const pdfjs = await getPdfJs();
-  if (!pdfjs) return 1;
-  const loadingTask = pdfjs.getDocument({ data: pdfData });
-  const pdf = await loadingTask.promise;
-  return pdf.numPages;
+  try {
+    const pdfDoc = await loadPdfDocument(pdfData);
+    return pdfDoc.numPages;
+  } catch (err) {
+    console.warn('Could not read page count via PDF.js, trying pdf-lib fallback', err);
+    try {
+      const bufferCopy = new Uint8Array(pdfData.slice(0));
+      const pdfLibDoc = await PDFDocument.load(bufferCopy, { ignoreEncryption: true });
+      return pdfLibDoc.getPageCount();
+    } catch {
+      return 1;
+    }
+  }
 }
 
 /**
@@ -91,8 +129,9 @@ export async function exportModifiedPdf(
   annotationsByPage: Record<number, Annotation[]>,
   renderedPagesDimensions: Record<number, { width: number; height: number }>
 ): Promise<Blob> {
-  // Load original PDF document
-  const pdfDoc = await PDFDocument.load(originalPdfBytes);
+  // Always use a clean copy of the ArrayBuffer
+  const bufferCopy = new Uint8Array(originalPdfBytes.slice(0));
+  const pdfDoc = await PDFDocument.load(bufferCopy, { ignoreEncryption: true });
   const pages = pdfDoc.getPages();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -110,8 +149,7 @@ export async function exportModifiedPdf(
 
     // Check if there are complex raster strokes (erase / draw) that need overlay canvas
     const complexStrokes = annotations.filter((a) => a.type === 'erase' || a.type === 'draw');
-    if (complexStrokes.length > 0) {
-      // Create temporary offscreen canvas to render strokes
+    if (complexStrokes.length > 0 && typeof document !== 'undefined') {
       const overlayCanvas = document.createElement('canvas');
       overlayCanvas.width = renderDim.width;
       overlayCanvas.height = renderDim.height;
@@ -149,20 +187,23 @@ export async function exportModifiedPdf(
           }
         }
 
-        // Convert overlay canvas to PNG bytes and embed into PDF page
-        const overlayDataUrl = overlayCanvas.toDataURL('image/png');
-        const overlayBytes = await fetch(overlayDataUrl).then((res) => res.arrayBuffer());
-        const embeddedPng = await pdfDoc.embedPng(overlayBytes);
-        page.drawImage(embeddedPng, {
-          x: 0,
-          y: 0,
-          width: origW,
-          height: origH,
-        });
+        try {
+          const overlayDataUrl = overlayCanvas.toDataURL('image/png');
+          const overlayBytes = await fetch(overlayDataUrl).then((res) => res.arrayBuffer());
+          const embeddedPng = await pdfDoc.embedPng(overlayBytes);
+          page.drawImage(embeddedPng, {
+            x: 0,
+            y: 0,
+            width: origW,
+            height: origH,
+          });
+        } catch (err) {
+          console.warn('Failed to embed stroke overlay PNG', err);
+        }
       }
     }
 
-    // Now render vector annotations: Redact boxes, Text annotations, Shapes
+    // Render vector annotations: Redact boxes, Text annotations, Shapes
     for (const ann of annotations) {
       if (ann.type === 'redact') {
         const c = hexToRgb(ann.color || '#000000');
@@ -171,7 +212,6 @@ export async function exportModifiedPdf(
         const pdfH = ann.height * scaleY;
         const pdfY = origH - (ann.y + ann.height) * scaleY;
 
-        // Permanent opaque redaction rectangle
         page.drawRectangle({
           x: pdfX,
           y: pdfY,
@@ -185,12 +225,9 @@ export async function exportModifiedPdf(
         const textFont = ann.isBold ? fontBold : font;
         const pdfFontSize = (ann.fontSize || 16) * scaleY;
         const pdfX = ann.x * scaleX;
-        // Adjust baseline for PDF coordinates
         const pdfY = origH - ann.y * scaleY - pdfFontSize;
 
-        // Clean characters for standard PDF font compatibility
-        const safeText = ann.text.replace(/[^\x00-\x7F]/g, (char) => {
-          // Normalize common accents if any
+        const safeText = (ann.text || '').replace(/[^\x00-\x7F]/g, (char) => {
           return char.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         });
 
